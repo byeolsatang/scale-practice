@@ -279,12 +279,13 @@ function drawCircle() {
 
   for (let i = 0; i < n; i++) {
     const ang = base + rotation + i * sa;
-    const isTop = (i === 0);
+    const isTop = (i === keyIdx);
+    const dist = Math.min((i - keyIdx + 12) % 12, (keyIdx - i + 12) % 12);
     cx.beginPath();
     cx.moveTo(CX, CY);
     cx.arc(CX, CY, CR-16, ang - sa/2 + .01, ang + sa/2 - .01);
     cx.closePath();
-    cx.fillStyle = isTop ? '#ff3c6e' : (i<=2||i>=10) ? majNear : majBg;
+    cx.fillStyle = isTop ? '#ff3c6e' : dist <= 2 ? majNear : majBg;
     cx.fill();
     cx.strokeStyle = bgCol; cx.lineWidth = 2; cx.stroke();
 
@@ -294,14 +295,14 @@ function drawCircle() {
     cx.fillStyle = isTop ? '#1a0510' : majTxt;
     cx.font = (isTop ? 'bold 26px' : '600 20px') + " 'Space Mono',monospace";
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
-    cx.fillText(MAJKEYS[(keyIdx + i) % 12], 0, 0);
+    cx.fillText(MAJKEYS[i % 12], 0, 0);
     cx.restore();
   }
 
   const minR = CR - 16 - 74;
   for (let i = 0; i < n; i++) {
     const ang = base + rotation + i * sa;
-    const isTop = (i === 0);
+    const isTop = (i === keyIdx);
     cx.beginPath();
     cx.moveTo(CX, CY);
     cx.arc(CX, CY, minR, ang - sa/2 + .02, ang + sa/2 - .02);
@@ -316,7 +317,7 @@ function drawCircle() {
     cx.fillStyle = isTop ? '#06140f' : minTxt;
     cx.font = "14px 'Space Mono',monospace";
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
-    cx.fillText(MINKEYS[(keyIdx + i) % 12], 0, 0);
+    cx.fillText(MINKEYS[i % 12], 0, 0);
     cx.restore();
   }
 
