@@ -17,6 +17,14 @@
   --dim:#7e7a92;
   --line:#ffffff14;
 }
+body.light {
+  --bg:#f0eef8;
+  --sur:#ffffff;
+  --sur2:#e8e5f5;
+  --txt:#1a1828;
+  --dim:#7e7a92;
+  --line:#00000012;
+}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--txt);font-family:'Space Mono','Noto Sans JP',monospace;
   min-height:100vh;display:flex;flex-direction:column;align-items:center;overflow-x:hidden;}
@@ -24,6 +32,9 @@ header{width:100%;padding:14px 20px;display:flex;align-items:center;justify-cont
   border-bottom:1px solid var(--line);}
 header h1{font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);}
 header h1 .accent{color:var(--mint);}
+#themeBtn{background:none;border:1px solid var(--line);color:var(--dim);padding:4px 10px;border-radius:20px;
+  font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;transition:all .2s;letter-spacing:.04em;}
+#themeBtn:hover{border-color:var(--mint);color:var(--mint);}
 
 /* category tabs */
 .cat-tabs{padding:10px 12px 4px;width:100%;max-width:440px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;}
@@ -99,7 +110,10 @@ header h1 .accent{color:var(--mint);}
 
 <header>
   <h1>♪ SCALE <span class="accent">CIRCLE</span></h1>
-  <span style="font-size:10.5px;color:var(--dim)">CIRCLE OF 5THS</span>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:10.5px;color:var(--dim)">CIRCLE OF 5THS</span>
+    <button id="themeBtn" onclick="toggleTheme()">☀ LIGHT</button>
+  </div>
 </header>
 
 <div id="loadBar"><div id="loadSpin"></div><span id="loadTxt">ピアノ音源を読み込み中...</span></div>
@@ -154,7 +168,16 @@ header h1 .accent{color:var(--mint);}
 const MAJKEYS = ['C','G','D','A','E','B','F#','Db','Ab','Eb','Bb','F'];
 const MINKEYS = ['Am','Em','Bm','F#m','C#m','G#m','D#m','Bbm','Fm','Cm','Gm','Dm'];
 const KEY2SEMI = {C:0,G:7,D:2,A:9,E:4,B:11,'F#':6,Db:1,Ab:8,Eb:3,Bb:10,F:5};
-const NOTENAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTENAMES       = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTENAMES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+// スケール名 → ♭優先表記を使うか
+const FLAT_SCALES = new Set([
+  'ハーモニックマイナー','メロディックマイナー','エオリアン (マイナー)',
+  'ドリアン','フリジアン','ロクリアン',
+  'マイナーペンタ','ブルーノート (マイナー)','マイナービバップ','ドリアンビバップ',
+  'オルタード','ディミニッシュ (HW)','ディミニッシュ (WH)',
+]);
+function noteNames() { return FLAT_SCALES.has(scaleName) ? NOTENAMES_FLAT : NOTENAMES; }
 
 const CATEGORIES = {
   '教会旋法': [
@@ -242,6 +265,14 @@ const cx = cc.getContext('2d');
 const CX = 300, CY = 300, CR = 300;
 
 function drawCircle() {
+  const isLight = document.body.classList.contains('light');
+  const bgCol   = isLight ? '#f0eef8' : '#0a0a0f';
+  const majBg   = isLight ? '#e8d0da' : '#3a1828';
+  const majNear = isLight ? '#f0b0c0' : '#7a2540';
+  const majTxt  = isLight ? '#1a1828' : '#f0eef5';
+  const minBg   = isLight ? '#c8f0e4' : '#1a4a3c';
+  const minTxt  = isLight ? '#0a2018' : '#9fe8d4';
+
   cx.clearRect(0, 0, CR*2, CR*2);
   const n = 12, sa = Math.PI*2/n;
   const base = -Math.PI/2;
@@ -253,14 +284,14 @@ function drawCircle() {
     cx.moveTo(CX, CY);
     cx.arc(CX, CY, CR-16, ang - sa/2 + .01, ang + sa/2 - .01);
     cx.closePath();
-    cx.fillStyle = isTop ? '#ff3c6e' : (i<=2||i>=10) ? '#7a2540' : '#3a1828';
+    cx.fillStyle = isTop ? '#ff3c6e' : (i<=2||i>=10) ? majNear : majBg;
     cx.fill();
-    cx.strokeStyle = '#0a0a0f'; cx.lineWidth = 2; cx.stroke();
+    cx.strokeStyle = bgCol; cx.lineWidth = 2; cx.stroke();
 
     const lr = CR - 16 - 34;
     const lx = CX + Math.cos(ang)*lr, ly = CY + Math.sin(ang)*lr;
     cx.save(); cx.translate(lx, ly);
-    cx.fillStyle = isTop ? '#1a0510' : '#f0eef5';
+    cx.fillStyle = isTop ? '#1a0510' : majTxt;
     cx.font = (isTop ? 'bold 26px' : '600 20px') + " 'Space Mono',monospace";
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
     cx.fillText(MAJKEYS[(keyIdx + i) % 12], 0, 0);
@@ -275,14 +306,14 @@ function drawCircle() {
     cx.moveTo(CX, CY);
     cx.arc(CX, CY, minR, ang - sa/2 + .02, ang + sa/2 - .02);
     cx.closePath();
-    cx.fillStyle = isTop ? '#4af0c4' : '#1a4a3c';
+    cx.fillStyle = isTop ? '#4af0c4' : minBg;
     cx.fill();
-    cx.strokeStyle = '#0a0a0f'; cx.lineWidth = 2; cx.stroke();
+    cx.strokeStyle = bgCol; cx.lineWidth = 2; cx.stroke();
 
     const lr = minR - 24;
     const lx = CX + Math.cos(ang)*lr, ly = CY + Math.sin(ang)*lr;
     cx.save(); cx.translate(lx, ly);
-    cx.fillStyle = isTop ? '#06140f' : '#9fe8d4';
+    cx.fillStyle = isTop ? '#06140f' : minTxt;
     cx.font = "14px 'Space Mono',monospace";
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
     cx.fillText(MINKEYS[(keyIdx + i) % 12], 0, 0);
@@ -291,7 +322,7 @@ function drawCircle() {
 
   cx.beginPath();
   cx.arc(CX, CY, minR - 48, 0, Math.PI*2);
-  cx.fillStyle = '#0a0a0f'; cx.fill();
+  cx.fillStyle = bgCol; cx.fill();
 
   // 固定ポインター
   cx.beginPath();
@@ -362,46 +393,49 @@ function diatonicStep(noteLetter, octave) {
 }
 
 function drawStaff() {
+  const isLight = document.body.classList.contains('light');
+  const lineCol  = isLight ? '#a0a0b8' : '#5a5870';
+  const noteCol  = isLight ? '#2a2840' : '#dcd9ea';
+  const accCol   = isLight ? '#7070a0' : '#bcb8d4';
+  const lblDim   = isLight ? '#8888aa' : '#6f6c87';
+
   const W = sc.width, H = sc.height;
   sx.clearRect(0, 0, W, H);
 
+  const names = noteNames();
   const root = KEY2SEMI[MAJKEYS[keyIdx]];
   const ivs = SCALES[scaleName];
-  const ls = 13; // line spacing (px between staff lines)
-  const staffTop = 38;          // y of top line (F5)
-  const E4y = staffTop + 4*ls;  // bottom line = E4
+  const ls = 13;
+  const staffTop = 38;
+  const E4y = staffTop + 4*ls;
 
   const leftPad = 54, rightPad = 14;
   const allNotes = [...ivs, 12];
   const spacing = (W - leftPad - rightPad) / (allNotes.length + 0.4);
 
   // --- 5線 ---
-  sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
+  sx.strokeStyle = lineCol; sx.lineWidth = 1.4;
   for (let l = 0; l < 5; l++) {
     const y = staffTop + l*ls;
     sx.beginPath(); sx.moveTo(leftPad-6, y); sx.lineTo(W-rightPad, y); sx.stroke();
   }
 
-  // --- ト音記号 (正確な位置・サイズで描画) ---
-  // --- ト音記号 (Canvas手描き: G4線を基準に正確配置) ---
   drawTrebleClef(sx, leftPad - 14, staffTop, ls);
 
   // --- 音符描画 ---
   allNotes.forEach((iv, i) => {
     const semi = (root + iv) % 12;
-    const noteName = NOTENAMES[semi];
-    const noteLetter = noteName[0]; // C,D,E,F,G,A,B (シャープは[0]だけ取る)
+    const noteName = names[semi];
+    const noteLetter = noteName[0];
 
-    // オクターブ計算: ルートからの半音距離で何オクターブ上がったか判定
     let noteOct = oct;
     if (iv >= 12) {
       noteOct = oct + 1;
     } else {
-      // root（0semi目）からのインターバルで実際の音名がrootより下がる(巡回)場合 oct+1
       if (semi < root) noteOct = oct + 1;
     }
 
-    const step = diatonicStep(noteLetter, noteOct); // E4=0
+    const step = diatonicStep(noteLetter, noteOct);
     const ny = E4y - step * (ls/2);
     const nx = leftPad + (i + 0.7)*spacing;
 
@@ -409,8 +443,8 @@ function drawStaff() {
     const isRoot = i === 0;
     const isOct = iv === 12;
 
-    // 加線 (ledger lines)
-    sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
+    // 加線
+    sx.strokeStyle = lineCol; sx.lineWidth = 1.4;
     if (step < 0) {
       for (let l = 0; l >= step; l -= 2) {
         const ly = E4y - l*(ls/2);
@@ -424,13 +458,12 @@ function drawStaff() {
       }
     }
 
-    const col = isLit ? '#ffb547' : (isRoot||isOct) ? '#ff3c6e' : '#dcd9ea';
+    const col = isLit ? '#ffb547' : (isRoot||isOct) ? '#ff3c6e' : noteCol;
     sx.fillStyle = col;
     sx.beginPath();
     sx.ellipse(nx, ny, 7, 5.6, -0.18, 0, Math.PI*2);
     sx.fill();
 
-    // 符尾 (stem): 五線の中央(B4, step=6)より上ならstem下向き
     const stemUp = step < 6;
     sx.strokeStyle = col; sx.lineWidth = 1.6;
     sx.beginPath();
@@ -439,15 +472,15 @@ function drawStaff() {
     sx.lineTo(stemX, ny + (stemUp ? -26 : 26));
     sx.stroke();
 
-    // シャープ記号
-    if (noteName.includes('#')) {
-      sx.fillStyle = '#bcb8d4'; sx.font = '13px serif';
+    // 臨時記号 (♯ or ♭)
+    if (noteName.includes('#') || noteName.includes('b')) {
+      sx.fillStyle = accCol; sx.font = '13px serif';
       sx.textAlign = 'center'; sx.textBaseline = 'middle';
-      sx.fillText('♯', nx-15, ny);
+      sx.fillText(noteName.includes('#') ? '♯' : '♭', nx-15, ny);
     }
 
     // ラベル
-    sx.fillStyle = (isRoot||isOct) ? '#ff3c6e' : '#6f6c87';
+    sx.fillStyle = (isRoot||isOct) ? '#ff3c6e' : lblDim;
     sx.font = "9.5px 'Space Mono',monospace";
     sx.textAlign = 'center'; sx.textBaseline = 'top';
     sx.fillText(noteName, nx, staffTop + 4*ls + ls*0.9);
@@ -456,6 +489,7 @@ function drawStaff() {
 
 // ===== CHIPS =====
 function buildChips() {
+  const names = noteNames();
   const root = KEY2SEMI[MAJKEYS[keyIdx]];
   const ivs = SCALES[scaleName];
   const el = document.getElementById('chips');
@@ -465,7 +499,7 @@ function buildChips() {
     const c = document.createElement('div');
     c.className = 'chip' + (i===0?' root':'');
     c.id = 'chip'+i;
-    c.textContent = NOTENAMES[semi];
+    c.textContent = names[semi];
     c.onclick = () => playOnce(root + (iv % 12), oct);
     el.appendChild(c);
   });
@@ -726,6 +760,13 @@ function onEnd(){
 cc.addEventListener('mouseup', onEnd);
 cc.addEventListener('touchend', onEnd);
 document.addEventListener('mouseup', ()=>{if(dragging)onEnd();});
+
+// ===== THEME =====
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('themeBtn').textContent = isLight ? '☾ DARK' : '☀ LIGHT';
+  drawCircle(); drawStaff();
+}
 
 // ===== INIT =====
 buildCatTabs();
