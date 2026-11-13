@@ -74,7 +74,15 @@ header h1 .accent{color:var(--mint);}
 #playBtn{background:var(--pink);border:none;border-radius:20px;color:#1a0510;font-family:'Space Mono',monospace;
   font-size:11.5px;font-weight:700;padding:6px 16px;cursor:pointer;transition:all .15s;}
 #playBtn.stop{background:var(--amber);color:#1a1206;}
-#scanvas{width:100%;height:130px;display:block;}
+#scoreDiv{width:100%;}
+#scoreDiv svg{background:transparent;}
+#scoreDiv .abcjs-staff line,
+#scoreDiv .abcjs-staff path{stroke:#5a5870;}
+#scoreDiv .abcjs-clef path,
+#scoreDiv .abcjs-key-signature path,
+#scoreDiv .abcjs-time-signature path{fill:#9b97b3;stroke:none;}
+#scoreDiv .abcjs-note path,
+#scoreDiv .abcjs-note ellipse{fill:#dcd9ea;stroke:none;}
 .audio-note{font-size:9.5px;color:var(--dim);opacity:.6;margin-top:8px;letter-spacing:.02em;}
 
 /* controls */
@@ -94,6 +102,7 @@ header h1 .accent{color:var(--mint);}
 @keyframes spin{to{transform:rotate(360deg);}}
 #loadTxt{font-size:11px;color:var(--dim);}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js"></script>
 </head>
 <body>
 
@@ -130,7 +139,7 @@ header h1 .accent{color:var(--mint);}
       <button id="playBtn" onclick="togglePlay()">▶ 再生</button>
     </div>
   </div>
-  <canvas id="scanvas" width="720" height="160"></canvas>
+  <div id="scoreDiv" style="color:var(--txt);min-height:90px;"></div>
   <div class="audio-note" id="audioNote"></div>
 </div>
 
@@ -331,161 +340,117 @@ function drawCircle() {
   cx.closePath(); cx.fillStyle = '#ffb547'; cx.fill();
 }
 
-// ===== STAFF =====
-const sc = document.getElementById('scanvas');
-const sx = sc.getContext('2d');
+// ===== STAFF (abcjs) =====
+// ABC記譜法でスケールを五線譜表示。scale-251-drillと同方式。
 
-const NOTE_ORDER = ['C','D','E','F','G','A','B'];
+// 半音→音名（ABC記法）
+// abcjsのABC記法: 大文字=オクターブ4, 小文字=オクターブ5
+// カンマ=1オクターブ下、アポストロフィ=1オクターブ上
+const ABC_NOTES = ['C','_D','D','_E','E','F','_G','G','_A','A','_B','B'];
+// フラット系キーはフラット表記を優先
+const ABC_NOTES_FLAT = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+const FLAT_KEYS = new Set(['F','Bb','Eb','Ab','Db','Gb']);
 
-function diatonicStep(noteLetter, octave) {
-  // E4 = step 0 基準。半音間隔: 各diatonicステップ = ls/2 px
-  return (octave - 4) * 7 + (NOTE_ORDER.indexOf(noteLetter) - 2);
+function semiToAbc(semi, octave, keyName) {
+  const useFlatName = FLAT_KEYS.has(keyName);
+  const name = useFlatName ? ABC_NOTES_FLAT[semi] : ABC_NOTES[semi];
+  // ABC記法: oct4=大文字, oct5=小文字, oct3=大文字+カンマ, oct6=小文字+アポストロフィ
+  if (octave === 4) return name;        // C D E...
+  if (octave === 5) return name.toLowerCase() + (name.length > 1 ? '' : ''); // c d e...
+  if (octave === 3) return name + ',';  // C, D,
+  if (octave === 6) return name.toLowerCase() + "'"; // c' d'
+  if (octave === 2) return name + ',,';
+  return name;
 }
 
-// ト音記号: Canvas手描き (Bravura不要)
-// 参考: G4線(下から2番目)を軸に、縦棒・Gループ・下丸を描く
-function drawTrebleClef(ctx, x0, staffTop, ls) {
-  const G4y = staffTop + 3 * ls; // G4線(下から2番目)
-  ctx.save();
-  ctx.strokeStyle = '#9b97b3';
-  ctx.lineWidth = ls * 0.14;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  const u = ls * 0.55; // 単位スケール
-
-  // --- 縦の主軸曲線: 上から下へ ---
-  ctx.beginPath();
-  ctx.moveTo(x0 + u*1.0, G4y - u*5.5);           // 上端
-  ctx.bezierCurveTo(
-    x0 + u*2.2, G4y - u*4.5,                      // 右に張り出す
-    x0 + u*2.0, G4y + u*0.5,
-    x0 + u*0.8, G4y + u*1.5                        // G線付近
-  );
-  ctx.bezierCurveTo(
-    x0 - u*0.2, G4y + u*2.5,
-    x0 - u*0.5, G4y + u*3.2,
-    x0 + u*0.5, G4y + u*3.5                        // 下部の丸の中心へ
-  );
-  ctx.stroke();
-
-  // --- G線を巻くループ (G4線を中心に楕円) ---
-  ctx.beginPath();
-  ctx.ellipse(x0 + u*1.0, G4y - u*0.5, u*1.05, u*1.45, 0.1, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // --- 下部の小さな丸 (C4加線の付近) ---
-  ctx.beginPath();
-  ctx.arc(x0 + u*0.6, G4y + u*3.0, u*0.52, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-function drawStaff() {
-  const W = sc.width;
-  sx.clearRect(0, 0, W, sc.height);
-
-  const root = KEY2SEMI[MAJKEYS[keyIdx]];
+function buildAbcScale() {
+  const keyName = MAJKEYS[keyIdx];
+  const root = KEY2SEMI[keyName];
   const ivs = SCALES[scaleName];
-  const ls = 12;       // 線間隔
-  const staffTop = 20; // 最上線(F5)のY座標
-  const E4y = staffTop + 4 * ls; // 最下線(E4)
-
-  const leftPad = 48, rightPad = 10;
   const allNotes = [...ivs, 12];
-  const spacing = (W - leftPad - rightPad) / (allNotes.length + 0.3);
 
-  // --- 五線 ---
-  sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.3;
-  for (let l = 0; l < 5; l++) {
-    const y = staffTop + l * ls;
-    sx.beginPath(); sx.moveTo(leftPad - 4, y); sx.lineTo(W - rightPad, y); sx.stroke();
-  }
-
-  // --- ト音記号: leftPad-40 付近に配置 ---
-  drawTrebleClef(sx, leftPad - 38, staffTop, ls);
-
-  // --- 音符 ---
-  allNotes.forEach((iv, i) => {
+  // オクターブ決定（Cメジャー oct4 → C4-C5の範囲に収める）
+  const notes = allNotes.map((iv, i) => {
     const semi = (root + (iv % 12)) % 12;
-    const noteName = NOTENAMES[semi];
-    const noteLetter = noteName[0];
-
-    // オクターブ決定
     let noteOct = oct;
     if (iv >= 12) {
       noteOct = oct + 1;
-    } else {
-      const rootLetter = NOTENAMES[root][0];
-      const rootDeg = NOTE_ORDER.indexOf(rootLetter);
-      const noteDeg = NOTE_ORDER.indexOf(noteLetter);
-      // 半音が根音より小さく、diatonic degreeも根音以下 → オクターブが一周した
-      if (semi < root && noteDeg <= rootDeg) noteOct = oct + 1;
+    } else if (semi < root) {
+      noteOct = oct + 1;
     }
-
-    const step = diatonicStep(noteLetter, noteOct);
-    const ny = E4y - step * (ls / 2);
-    const nx = leftPad + (i + 0.6) * spacing;
-
-    const isLit  = litNotes.includes(i);
-    const isRoot = i === 0;
-    const isOct  = iv === 12;
-    const col = isLit ? '#ffb547' : (isRoot || isOct) ? '#ff3c6e' : '#dcd9ea';
-
-    // 加線: 音符が五線の外にある場合
-    // 下加線: step<=−2 (C4以下)。step=-2→C4加線1本, step=-4→B3加線2本...
-    // 上加線: step>=10 (G5以上)。step=10→A5加線1本...
-    sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.3;
-    if (step <= -2) {
-      // -2,-4,-6... の各偶数stepで加線を引く（音符位置まで）
-      for (let ll = -2; ll >= step; ll -= 2) {
-        const ly = E4y - ll * (ls / 2);
-        sx.beginPath(); sx.moveTo(nx - 10, ly); sx.lineTo(nx + 10, ly); sx.stroke();
-      }
-    }
-    if (step >= 10) {
-      // 10,12,14... の各偶数stepで加線を引く
-      for (let ll = 10; ll <= step; ll += 2) {
-        const ly = E4y - ll * (ls / 2);
-        sx.beginPath(); sx.moveTo(nx - 10, ly); sx.lineTo(nx + 10, ly); sx.stroke();
-      }
-    }
-
-    // 音符玉
-    sx.fillStyle = col;
-    sx.beginPath();
-    sx.ellipse(nx, ny, 6.5, 5.2, -0.18, 0, Math.PI * 2);
-    sx.fill();
-
-    // 符尾: B4=step4が中央。step<=3なら上向き(右)、step>=5なら下向き(左)、4はどちらでも良い
-    const stemUp = step < 4;
-    sx.strokeStyle = col; sx.lineWidth = 1.5;
-    sx.beginPath();
-    const stemX = nx + (stemUp ? 6 : -6);
-    sx.moveTo(stemX, ny + (stemUp ? -2 : 2));
-    sx.lineTo(stemX, ny + (stemUp ? -24 : 24));
-    sx.stroke();
-
-    // シャープ記号
-    if (noteName.includes('#')) {
-      sx.fillStyle = '#bcb8d4'; sx.font = '12px serif';
-      sx.textAlign = 'center'; sx.textBaseline = 'middle';
-      sx.fillText('♯', nx - 13, ny);
-    }
-    // フラット記号
-    if (noteName.includes('b') && !noteName.startsWith('B')) {
-      sx.fillStyle = '#bcb8d4'; sx.font = '14px serif';
-      sx.textAlign = 'center'; sx.textBaseline = 'middle';
-      sx.fillText('♭', nx - 13, ny - 1);
-    }
-
-    // 音名ラベル
-    sx.fillStyle = (isRoot || isOct) ? '#ff3c6e' : '#6f6c87';
-    sx.font = "9px 'Space Mono',monospace";
-    sx.textAlign = 'center'; sx.textBaseline = 'top';
-    sx.fillText(noteName, nx, E4y + ls * 0.7);
+    return { semi, octave: noteOct, isRoot: i === 0, isOct: iv === 12, idx: i };
   });
+
+  // ABC記法の音符列を生成
+  const noteStrs = notes.map((n, i) => {
+    const abc = semiToAbc(n.semi, n.octave, keyName);
+    // 長さはすべて1(quarter note = L:1/4)
+    return abc;
+  });
+
+  // キーシグネチャ: abcjsはKタグで処理
+  const abcKey = keyName.replace('b', 'b').replace('#', '#'); // そのまま使える
+
+  const abcStr = [
+    'X:1',
+    'M:' + (allNotes.length) + '/4',  // 音符の数だけ拍
+    'L:1/4',
+    'K:' + abcKey,
+    noteStrs.join(' ')
+  ].join('\n');
+
+  return abcStr;
+}
+
+
+function drawStaff() {
+  const div = document.getElementById('scoreDiv');
+  if (!div || typeof ABCJS === 'undefined') return;
+
+  const keyName = MAJKEYS[keyIdx];
+  const root = KEY2SEMI[keyName];
+  const ivs = SCALES[scaleName];
+  const allNotes = [...ivs, 12];
+
+  const useFlatName = FLAT_KEYS.has(keyName);
+  const notes = allNotes.map((iv, i) => {
+    const semi = (root + (iv % 12)) % 12;
+    let noteOct = oct;
+    if (iv >= 12) {
+      noteOct = oct + 1;
+    } else if (semi < root) {
+      noteOct = oct + 1;
+    }
+    return semiToAbc(semi, noteOct, keyName);
+  });
+
+  const abcKey = keyName;
+  const abcStr = `X:1\nM:${allNotes.length}/4\nL:1/4\nK:${abcKey}\n${notes.join(' ')}`;
+
+  ABCJS.renderAbc(div, abcStr, {
+    responsive: 'resize',
+    foregroundColor: '#dcd9ea',
+    paddingtop: 4,
+    paddingbottom: 4,
+    paddingleft: 0,
+    paddingright: 0,
+    staffwidth: div.clientWidth || 380,
+  });
+
+  // 発光中の音符に色を付ける
+  if (litNotes.length > 0) {
+    const svgNotes = div.querySelectorAll('.abcjs-note');
+    svgNotes.forEach((el, i) => {
+      if (i === litNotes[0]) {
+        el.querySelectorAll('path, ellipse, rect').forEach(p => p.style.fill = '#ffb547');
+      }
+    });
+  }
+
+  // ルート音と最終音(オクターブ)に色
+  const svgNotes = div.querySelectorAll('.abcjs-note');
+  if (svgNotes[0]) svgNotes[0].querySelectorAll('path,ellipse,rect').forEach(p => p.style.fill = '#ff3c6e');
+  if (svgNotes[allNotes.length - 1]) svgNotes[allNotes.length - 1].querySelectorAll('path,ellipse,rect').forEach(p => p.style.fill = '#ff3c6e');
 }
 
 // ===== CHIPS =====
