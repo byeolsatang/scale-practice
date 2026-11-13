@@ -130,7 +130,7 @@ header h1 .accent{color:var(--mint);}
       <button id="playBtn" onclick="togglePlay()">▶ 再生</button>
     </div>
   </div>
-  <canvas id="scanvas" width="720" height="190"></canvas>
+  <canvas id="scanvas" width="720" height="160"></canvas>
   <div class="audio-note" id="audioNote"></div>
 </div>
 
@@ -331,75 +331,80 @@ function drawCircle() {
   cx.closePath(); cx.fillStyle = '#ffb547'; cx.fill();
 }
 
-// ===== STAFF (手描きト音記号 + 修正済み音符計算) =====
+// ===== STAFF =====
 const sc = document.getElementById('scanvas');
 const sx = sc.getContext('2d');
 
-// 五線譜: 下から E4, G4, B4, D5, F5
-// diatonicStep: E4=0, 1半間上がるごとに+1
-const NOTE_ORDER = ['C','D','E','F','G','A','B']; // E=index2
+const NOTE_ORDER = ['C','D','E','F','G','A','B'];
 
 function diatonicStep(noteLetter, octave) {
-  const idx = NOTE_ORDER.indexOf(noteLetter);
-  return (octave - 4) * 7 + (idx - 2); // E4 = step 0
+  // E4 = step 0 基準。半音間隔: 各diatonicステップ = ls/2 px
+  return (octave - 4) * 7 + (NOTE_ORDER.indexOf(noteLetter) - 2);
 }
 
-// ト音記号: ベジェ曲線手描き。G4線(下から2番目=staffTop+3*ls)を基準に描画
-function drawTrebleClef(ctx, x, staffTop, ls) {
-  const gLineY = staffTop + 3 * ls; // G4線のY座標
+// ト音記号: Canvas手描き (Bravura不要)
+// 参考: G4線(下から2番目)を軸に、縦棒・Gループ・下丸を描く
+function drawTrebleClef(ctx, x0, staffTop, ls) {
+  const G4y = staffTop + 3 * ls; // G4線(下から2番目)
   ctx.save();
   ctx.strokeStyle = '#9b97b3';
-  ctx.fillStyle = '#9b97b3';
-  ctx.lineWidth = ls * 0.15;
+  ctx.lineWidth = ls * 0.14;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const s = ls * 0.5; // スケール係数
-  const cx = x + s * 1.2;
-  const cy = gLineY;
+  const u = ls * 0.55; // 単位スケール
 
-  // 1. 縦棒（上から下へ）
+  // --- 縦の主軸曲線: 上から下へ ---
   ctx.beginPath();
-  ctx.moveTo(cx, cy - s * 6.5);
-  ctx.bezierCurveTo(cx + s * 0.3, cy - s * 5, cx + s * 0.3, cy + s * 2, cx - s * 0.3, cy + s * 3.5);
+  ctx.moveTo(x0 + u*1.0, G4y - u*5.5);           // 上端
+  ctx.bezierCurveTo(
+    x0 + u*2.2, G4y - u*4.5,                      // 右に張り出す
+    x0 + u*2.0, G4y + u*0.5,
+    x0 + u*0.8, G4y + u*1.5                        // G線付近
+  );
+  ctx.bezierCurveTo(
+    x0 - u*0.2, G4y + u*2.5,
+    x0 - u*0.5, G4y + u*3.2,
+    x0 + u*0.5, G4y + u*3.5                        // 下部の丸の中心へ
+  );
   ctx.stroke();
 
-  // 2. G線を巻く楕円ループ（G4=cy を中心に）
+  // --- G線を巻くループ (G4線を中心に楕円) ---
   ctx.beginPath();
-  ctx.ellipse(cx, cy - s * 0.8, s * 1.1, s * 1.5, 0.15, 0, Math.PI * 2);
+  ctx.ellipse(x0 + u*1.0, G4y - u*0.5, u*1.05, u*1.45, 0.1, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 3. 下部の丸（下加線C4あたりを囲む小丸）
+  // --- 下部の小さな丸 (C4加線の付近) ---
   ctx.beginPath();
-  ctx.arc(cx - s * 0.1, cy + s * 2.8, s * 0.55, 0, Math.PI * 2);
+  ctx.arc(x0 + u*0.6, G4y + u*3.0, u*0.52, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.restore();
 }
 
 function drawStaff() {
-  const W = sc.width, H = sc.height;
-  sx.clearRect(0, 0, W, H);
+  const W = sc.width;
+  sx.clearRect(0, 0, W, sc.height);
 
   const root = KEY2SEMI[MAJKEYS[keyIdx]];
   const ivs = SCALES[scaleName];
-  const ls = 13;
-  const staffTop = 38;         // 最上線(F5)のY
-  const E4y = staffTop + 4*ls; // 最下線(E4)のY
+  const ls = 12;       // 線間隔
+  const staffTop = 20; // 最上線(F5)のY座標
+  const E4y = staffTop + 4 * ls; // 最下線(E4)
 
-  const leftPad = 54, rightPad = 14;
+  const leftPad = 48, rightPad = 10;
   const allNotes = [...ivs, 12];
-  const spacing = (W - leftPad - rightPad) / (allNotes.length + 0.4);
+  const spacing = (W - leftPad - rightPad) / (allNotes.length + 0.3);
 
   // --- 五線 ---
-  sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
+  sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.3;
   for (let l = 0; l < 5; l++) {
     const y = staffTop + l * ls;
-    sx.beginPath(); sx.moveTo(leftPad - 6, y); sx.lineTo(W - rightPad, y); sx.stroke();
+    sx.beginPath(); sx.moveTo(leftPad - 4, y); sx.lineTo(W - rightPad, y); sx.stroke();
   }
 
-  // --- ト音記号 ---
-  drawTrebleClef(sx, leftPad - 46, staffTop, ls);
+  // --- ト音記号: leftPad-40 付近に配置 ---
+  drawTrebleClef(sx, leftPad - 38, staffTop, ls);
 
   // --- 音符 ---
   allNotes.forEach((iv, i) => {
@@ -407,71 +412,79 @@ function drawStaff() {
     const noteName = NOTENAMES[semi];
     const noteLetter = noteName[0];
 
-    // オクターブ: スケール内での位置(diatonic degree)で判定
-    // iv=0～11: rootオクターブ, iv=12: 1オクターブ上
+    // オクターブ決定
     let noteOct = oct;
     if (iv >= 12) {
       noteOct = oct + 1;
     } else {
-      // 半音が根音より小さい場合(ラップアラウンド)かつdiatonicでも上になる場合のみ+1
       const rootLetter = NOTENAMES[root][0];
       const rootDeg = NOTE_ORDER.indexOf(rootLetter);
       const noteDeg = NOTE_ORDER.indexOf(noteLetter);
+      // 半音が根音より小さく、diatonic degreeも根音以下 → オクターブが一周した
       if (semi < root && noteDeg <= rootDeg) noteOct = oct + 1;
     }
 
     const step = diatonicStep(noteLetter, noteOct);
     const ny = E4y - step * (ls / 2);
-    const nx = leftPad + (i + 0.7) * spacing;
+    const nx = leftPad + (i + 0.6) * spacing;
 
     const isLit  = litNotes.includes(i);
     const isRoot = i === 0;
     const isOct  = iv === 12;
+    const col = isLit ? '#ffb547' : (isRoot || isOct) ? '#ff3c6e' : '#dcd9ea';
 
-    // 加線
-    sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
-    // 下の加線: step < 0 (E4より下) → step=0の線から2刻みで追加
-    if (step < 0) {
+    // 加線: 音符が五線の外にある場合
+    // 下加線: step<=−2 (C4以下)。step=-2→C4加線1本, step=-4→B3加線2本...
+    // 上加線: step>=10 (G5以上)。step=10→A5加線1本...
+    sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.3;
+    if (step <= -2) {
+      // -2,-4,-6... の各偶数stepで加線を引く（音符位置まで）
       for (let ll = -2; ll >= step; ll -= 2) {
         const ly = E4y - ll * (ls / 2);
-        sx.beginPath(); sx.moveTo(nx - 11, ly); sx.lineTo(nx + 11, ly); sx.stroke();
+        sx.beginPath(); sx.moveTo(nx - 10, ly); sx.lineTo(nx + 10, ly); sx.stroke();
       }
     }
-    // 上の加線: step > 8 (F5より上) → step=8の線から2刻みで追加
-    if (step > 8) {
+    if (step >= 10) {
+      // 10,12,14... の各偶数stepで加線を引く
       for (let ll = 10; ll <= step; ll += 2) {
         const ly = E4y - ll * (ls / 2);
-        sx.beginPath(); sx.moveTo(nx - 11, ly); sx.lineTo(nx + 11, ly); sx.stroke();
+        sx.beginPath(); sx.moveTo(nx - 10, ly); sx.lineTo(nx + 10, ly); sx.stroke();
       }
     }
 
-    const col = isLit ? '#ffb547' : (isRoot || isOct) ? '#ff3c6e' : '#dcd9ea';
+    // 音符玉
     sx.fillStyle = col;
     sx.beginPath();
-    sx.ellipse(nx, ny, 7, 5.6, -0.18, 0, Math.PI * 2);
+    sx.ellipse(nx, ny, 6.5, 5.2, -0.18, 0, Math.PI * 2);
     sx.fill();
 
-    // 符尾: 中央線はB4=step4。step<4なら上向き符尾(右)、step>=4なら下向き(左)
+    // 符尾: B4=step4が中央。step<=3なら上向き(右)、step>=5なら下向き(左)、4はどちらでも良い
     const stemUp = step < 4;
-    sx.strokeStyle = col; sx.lineWidth = 1.6;
+    sx.strokeStyle = col; sx.lineWidth = 1.5;
     sx.beginPath();
-    const stemX = nx + (stemUp ? 6.5 : -6.5);
-    sx.moveTo(stemX, ny);
-    sx.lineTo(stemX, ny + (stemUp ? -26 : 26));
+    const stemX = nx + (stemUp ? 6 : -6);
+    sx.moveTo(stemX, ny + (stemUp ? -2 : 2));
+    sx.lineTo(stemX, ny + (stemUp ? -24 : 24));
     sx.stroke();
 
     // シャープ記号
     if (noteName.includes('#')) {
-      sx.fillStyle = '#bcb8d4'; sx.font = '13px serif';
+      sx.fillStyle = '#bcb8d4'; sx.font = '12px serif';
       sx.textAlign = 'center'; sx.textBaseline = 'middle';
-      sx.fillText('♯', nx - 15, ny);
+      sx.fillText('♯', nx - 13, ny);
+    }
+    // フラット記号
+    if (noteName.includes('b') && !noteName.startsWith('B')) {
+      sx.fillStyle = '#bcb8d4'; sx.font = '14px serif';
+      sx.textAlign = 'center'; sx.textBaseline = 'middle';
+      sx.fillText('♭', nx - 13, ny - 1);
     }
 
     // 音名ラベル
     sx.fillStyle = (isRoot || isOct) ? '#ff3c6e' : '#6f6c87';
-    sx.font = "9.5px 'Space Mono',monospace";
+    sx.font = "9px 'Space Mono',monospace";
     sx.textAlign = 'center'; sx.textBaseline = 'top';
-    sx.fillText(noteName, nx, staffTop + 4*ls + ls * 0.9);
+    sx.fillText(noteName, nx, E4y + ls * 0.7);
   });
 }
 
