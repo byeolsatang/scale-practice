@@ -210,7 +210,7 @@ Object.entries(CATEGORIES).forEach(([cat, list]) => list.forEach(s => SLABELS[s]
 let keyIdx = 0;
 let currentCat = '教会旋法';
 let scaleName = 'アイオニアン (メジャー)';
-let rotation = 0;
+let rotation = 0;        // ドラッグ中の一時的な視覚オフセット（スナップ後は常に0）
 let bpm = 80, oct = 4;
 let isPlaying = false, loopOn = true;
 let playIdx = 0, playTimer = null;
@@ -777,7 +777,7 @@ function redraw() {
 }
 
 // ===== CIRCLE DRAG =====
-let dragging=false, dragStartA=0, rotStart=0, animF=null;
+let dragging=false, dragStartA=0, keyIdxAtDragStart=0, animF=null;
 function evP(e){
   const r=cc.getBoundingClientRect();
   const sx2=cc.width/r.width, sy2=cc.height/r.height;
@@ -787,19 +787,25 @@ function evP(e){
 }
 function getAng(x,y){return Math.atan2(y-CY,x-CX);}
 
-cc.addEventListener('mousedown',  e=>{dragging=true;cancelAnimationFrame(animF);const p=evP(e);dragStartA=getAng(p.x,p.y);rotStart=rotation;});
-cc.addEventListener('touchstart', e=>{dragging=true;cancelAnimationFrame(animF);const p=evP(e);dragStartA=getAng(p.x,p.y);rotStart=rotation;},{passive:true});
+cc.addEventListener('mousedown',  e=>{dragging=true;cancelAnimationFrame(animF);rotation=0;const p=evP(e);dragStartA=getAng(p.x,p.y);keyIdxAtDragStart=keyIdx;});
+cc.addEventListener('touchstart', e=>{dragging=true;cancelAnimationFrame(animF);rotation=0;const p=evP(e);dragStartA=getAng(p.x,p.y);keyIdxAtDragStart=keyIdx;},{passive:true});
 
 function onMove(e){
   if(!dragging)return;
   const p=evP(e);
   const a=getAng(p.x,p.y);
-  rotation = rotStart + (a - dragStartA);
-  // ドラッグ中は視覚的な回転だけ更新（kname表示も暫定更新）
   const sa=Math.PI*2/12;
-  const steps = -Math.round(rotation/sa);
-  const previewIdx = ((keyIdx + steps)%12+12)%12;
-  document.getElementById('kname').textContent = MAJKEYS[previewIdx];
+  const rawRot = a - dragStartA;
+  rotation = rawRot;
+  // ドラッグ中: keyIdxをドラッグ開始時から累積更新
+  // drawCircle()はMAJKEYS[(keyIdx+i)%12]でi=0を12時に描くので
+  // keyIdxを更新するとi=0の表示キーが変わる
+  const steps = -Math.round(rawRot/sa);
+  keyIdx = ((keyIdxAtDragStart + steps)%12+12)%12;
+  // rotationはi=0が「steps*sa分ずれた位置」に見えるように設定
+  // → ドラッグ量から「スナップ後の端数」だけ残す
+  rotation = rawRot + steps*sa;
+  document.getElementById('kname').textContent = MAJKEYS[keyIdx];
   drawCircle();
 }
 cc.addEventListener('mousemove', onMove);
@@ -807,13 +813,9 @@ cc.addEventListener('touchmove', onMove, {passive:true});
 
 function onEnd(){
   if(!dragging)return; dragging=false;
-  const sa=Math.PI*2/12;
-  // rotationから何コマ動いたかを計算し、keyIdxを累積更新
-  const steps = -Math.round(rotation/sa);
-  keyIdx = ((keyIdx + steps)%12+12)%12;
-  // rotationを0にスナップ: i=0が常に12時に来る正しい位置
-  const from = rotation, target = 0;
-  const diff = target - from;
+  // keyIdxはonMoveで確定済み。rotationを0にスナップするだけ
+  const from = rotation;
+  const diff = -from;
   let prog=0;
   function ani(){
     prog+=0.2;
