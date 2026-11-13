@@ -795,10 +795,11 @@ function onMove(e){
   const p=evP(e);
   const a=getAng(p.x,p.y);
   rotation = rotStart + (a - dragStartA);
+  // ドラッグ中は視覚的な回転だけ更新（kname表示も暫定更新）
   const sa=Math.PI*2/12;
   const steps = -Math.round(rotation/sa);
-  keyIdx = ((steps%12)+12)%12;
-  document.getElementById('kname').textContent = MAJKEYS[keyIdx];
+  const previewIdx = ((keyIdx + steps)%12+12)%12;
+  document.getElementById('kname').textContent = MAJKEYS[previewIdx];
   drawCircle();
 }
 cc.addEventListener('mousemove', onMove);
@@ -807,14 +808,16 @@ cc.addEventListener('touchmove', onMove, {passive:true});
 function onEnd(){
   if(!dragging)return; dragging=false;
   const sa=Math.PI*2/12;
+  // rotationから何コマ動いたかを計算し、keyIdxを累積更新
   const steps = -Math.round(rotation/sa);
-  keyIdx = ((steps%12)+12)%12;
-  const target = -steps*sa;
-  const from = rotation, diff = target-from;
+  keyIdx = ((keyIdx + steps)%12+12)%12;
+  // rotationを0にスナップ: i=0が常に12時に来る正しい位置
+  const from = rotation, target = 0;
+  const diff = target - from;
   let prog=0;
   function ani(){
     prog+=0.2;
-    if(prog>=1){rotation=target; redraw(); return;}
+    if(prog>=1){rotation=0; redraw(); return;}
     rotation = from + diff*(1-Math.pow(1-prog,3));
     drawCircle(); animF=requestAnimationFrame(ani);
   }
