@@ -331,66 +331,50 @@ function drawCircle() {
   cx.closePath(); cx.fillStyle = '#ffb547'; cx.fill();
 }
 
-// ト音記号: 専用の音楽記号フォント(Bravura Text)で正確なグリフを描画。
-// フォント読み込み完了まではフォールバック描画(シンプルなG字型)を使う。
-let musicFontReady = false;
-const musicFontFace = new FontFace('BravuraText', "url(https://cdn.jsdelivr.net/fontsource/fonts/bravura-text@latest/latin-400-normal.woff2) format('woff2')");
-musicFontFace.load().then(f => {
-  document.fonts.add(f);
-  musicFontReady = true;
-  drawStaff(); // フォント読み込み完了後に再描画
-}).catch(() => { musicFontReady = false; });
-
-function drawTrebleClef(ctx, x, staffTop, ls) {
-  // G4線(下から2番目)を基準に配置
-  const gLineY = staffTop + 3*ls;
-
-  if (musicFontReady) {
-    // SMuFL: U+E050 = G Clef。Bravuraのデザインでは
-    // グリフのベースラインがG線とほぼ一致するよう作られている
-    ctx.fillStyle = '#9b97b3';
-    ctx.font = `${ls*4.0}px BravuraText`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('\uE050', x, gLineY);
-  } else {
-    // フォールバック: フォント未読込時の簡易G字型(円弧+尾)
-    // G線(gLineY)を中心に渦を置き、下に尾を伸ばす
-    ctx.strokeStyle = '#9b97b3';
-    ctx.fillStyle = '#9b97b3';
-    ctx.lineCap = 'round';
-    const r = ls*0.62;
-    ctx.lineWidth = ls*0.16;
-    // 上部の渦(2重円弧でG字を表現)
-    ctx.beginPath();
-    ctx.arc(x + r, gLineY - ls*0.3, r, Math.PI*0.15, Math.PI*1.85);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x + r*1.15, gLineY - ls*0.3, r*0.45, 0, Math.PI*2);
-    ctx.stroke();
-    // 下に伸びる尾
-    ctx.beginPath();
-    ctx.moveTo(x + r*1.7, gLineY - ls*0.1);
-    ctx.quadraticCurveTo(x + r*2.2, gLineY + ls*1.8, x + r*0.6, gLineY + ls*2.3);
-    ctx.lineWidth = ls*0.22;
-    ctx.stroke();
-  }
-}
-
-// ===== STAFF (rewritten with correct treble clef + note positions) =====
+// ===== STAFF (手描きト音記号 + 修正済み音符計算) =====
 const sc = document.getElementById('scanvas');
 const sx = sc.getContext('2d');
 
-// 五線譜の正しい仕組み:
-// 五線(下から上): 線1=E4, 線2=G4, 線3=B4, 線4=D5, 線5=F5
-// 各「ステップ」は半線間隔(diatonic step)。E4を基準steps=0とする。
-// ステップ = (オクターブ-4)*7 + (音名インデックス - E4のインデックス(=2: C=0,D=1,E=2...))
+// 五線譜: 下から E4, G4, B4, D5, F5
+// diatonicStep: E4=0, 1半間上がるごとに+1
 const NOTE_ORDER = ['C','D','E','F','G','A','B']; // E=index2
 
 function diatonicStep(noteLetter, octave) {
-  const idx = NOTE_ORDER.indexOf(noteLetter); // 0..6
-  // E4 (idx=2, oct=4) を step=0 とする
-  return (octave - 4) * 7 + (idx - 2);
+  const idx = NOTE_ORDER.indexOf(noteLetter);
+  return (octave - 4) * 7 + (idx - 2); // E4 = step 0
+}
+
+// ト音記号: ベジェ曲線手描き。G4線(下から2番目=staffTop+3*ls)を基準に描画
+function drawTrebleClef(ctx, x, staffTop, ls) {
+  const gLineY = staffTop + 3 * ls; // G4線のY座標
+  ctx.save();
+  ctx.strokeStyle = '#9b97b3';
+  ctx.fillStyle = '#9b97b3';
+  ctx.lineWidth = ls * 0.15;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const s = ls * 0.5; // スケール係数
+  const cx = x + s * 1.2;
+  const cy = gLineY;
+
+  // 1. 縦棒（上から下へ）
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s * 6.5);
+  ctx.bezierCurveTo(cx + s * 0.3, cy - s * 5, cx + s * 0.3, cy + s * 2, cx - s * 0.3, cy + s * 3.5);
+  ctx.stroke();
+
+  // 2. G線を巻く楕円ループ（G4=cy を中心に）
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - s * 0.8, s * 1.1, s * 1.5, 0.15, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 3. 下部の丸（下加線C4あたりを囲む小丸）
+  ctx.beginPath();
+  ctx.arc(cx - s * 0.1, cy + s * 2.8, s * 0.55, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawStaff() {
@@ -399,71 +383,76 @@ function drawStaff() {
 
   const root = KEY2SEMI[MAJKEYS[keyIdx]];
   const ivs = SCALES[scaleName];
-  const ls = 13; // line spacing (px between staff lines)
-  const staffTop = 38;          // y of top line (F5)
-  const E4y = staffTop + 4*ls;  // bottom line = E4
+  const ls = 13;
+  const staffTop = 38;         // 最上線(F5)のY
+  const E4y = staffTop + 4*ls; // 最下線(E4)のY
 
   const leftPad = 54, rightPad = 14;
   const allNotes = [...ivs, 12];
   const spacing = (W - leftPad - rightPad) / (allNotes.length + 0.4);
 
-  // --- 5線 ---
+  // --- 五線 ---
   sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
   for (let l = 0; l < 5; l++) {
-    const y = staffTop + l*ls;
-    sx.beginPath(); sx.moveTo(leftPad-6, y); sx.lineTo(W-rightPad, y); sx.stroke();
+    const y = staffTop + l * ls;
+    sx.beginPath(); sx.moveTo(leftPad - 6, y); sx.lineTo(W - rightPad, y); sx.stroke();
   }
 
-  // --- ト音記号 (正確な位置・サイズで描画) ---
-  // --- ト音記号 (Canvas手描き: G4線を基準に正確配置) ---
-  drawTrebleClef(sx, leftPad - 14, staffTop, ls);
+  // --- ト音記号 ---
+  drawTrebleClef(sx, leftPad - 46, staffTop, ls);
 
-  // --- 音符描画 ---
+  // --- 音符 ---
   allNotes.forEach((iv, i) => {
-    const semi = (root + iv) % 12;
+    const semi = (root + (iv % 12)) % 12;
     const noteName = NOTENAMES[semi];
-    const noteLetter = noteName[0]; // C,D,E,F,G,A,B (シャープは[0]だけ取る)
+    const noteLetter = noteName[0];
 
-    // オクターブ計算: ルートからの半音距離で何オクターブ上がったか判定
+    // オクターブ: スケール内での位置(diatonic degree)で判定
+    // iv=0～11: rootオクターブ, iv=12: 1オクターブ上
     let noteOct = oct;
     if (iv >= 12) {
       noteOct = oct + 1;
     } else {
-      // root（0semi目）からのインターバルで実際の音名がrootより下がる(巡回)場合 oct+1
-      if (semi < root) noteOct = oct + 1;
+      // 半音が根音より小さい場合(ラップアラウンド)かつdiatonicでも上になる場合のみ+1
+      const rootLetter = NOTENAMES[root][0];
+      const rootDeg = NOTE_ORDER.indexOf(rootLetter);
+      const noteDeg = NOTE_ORDER.indexOf(noteLetter);
+      if (semi < root && noteDeg <= rootDeg) noteOct = oct + 1;
     }
 
-    const step = diatonicStep(noteLetter, noteOct); // E4=0
-    const ny = E4y - step * (ls/2);
-    const nx = leftPad + (i + 0.7)*spacing;
+    const step = diatonicStep(noteLetter, noteOct);
+    const ny = E4y - step * (ls / 2);
+    const nx = leftPad + (i + 0.7) * spacing;
 
-    const isLit = litNotes.includes(i);
+    const isLit  = litNotes.includes(i);
     const isRoot = i === 0;
-    const isOct = iv === 12;
+    const isOct  = iv === 12;
 
-    // 加線 (ledger lines)
+    // 加線
     sx.strokeStyle = '#5a5870'; sx.lineWidth = 1.4;
+    // 下の加線: step < 0 (E4より下) → step=0の線から2刻みで追加
     if (step < 0) {
-      for (let l = 0; l >= step; l -= 2) {
-        const ly = E4y - l*(ls/2);
-        sx.beginPath(); sx.moveTo(nx-11, ly); sx.lineTo(nx+11, ly); sx.stroke();
+      for (let ll = -2; ll >= step; ll -= 2) {
+        const ly = E4y - ll * (ls / 2);
+        sx.beginPath(); sx.moveTo(nx - 11, ly); sx.lineTo(nx + 11, ly); sx.stroke();
       }
     }
+    // 上の加線: step > 8 (F5より上) → step=8の線から2刻みで追加
     if (step > 8) {
-      for (let l = 10; l <= step; l += 2) {
-        const ly = E4y - l*(ls/2);
-        sx.beginPath(); sx.moveTo(nx-11, ly); sx.lineTo(nx+11, ly); sx.stroke();
+      for (let ll = 10; ll <= step; ll += 2) {
+        const ly = E4y - ll * (ls / 2);
+        sx.beginPath(); sx.moveTo(nx - 11, ly); sx.lineTo(nx + 11, ly); sx.stroke();
       }
     }
 
-    const col = isLit ? '#ffb547' : (isRoot||isOct) ? '#ff3c6e' : '#dcd9ea';
+    const col = isLit ? '#ffb547' : (isRoot || isOct) ? '#ff3c6e' : '#dcd9ea';
     sx.fillStyle = col;
     sx.beginPath();
-    sx.ellipse(nx, ny, 7, 5.6, -0.18, 0, Math.PI*2);
+    sx.ellipse(nx, ny, 7, 5.6, -0.18, 0, Math.PI * 2);
     sx.fill();
 
-    // 符尾 (stem): 五線の中央(B4, step=6)より上ならstem下向き
-    const stemUp = step < 6;
+    // 符尾: 中央線はB4=step4。step<4なら上向き符尾(右)、step>=4なら下向き(左)
+    const stemUp = step < 4;
     sx.strokeStyle = col; sx.lineWidth = 1.6;
     sx.beginPath();
     const stemX = nx + (stemUp ? 6.5 : -6.5);
@@ -475,14 +464,14 @@ function drawStaff() {
     if (noteName.includes('#')) {
       sx.fillStyle = '#bcb8d4'; sx.font = '13px serif';
       sx.textAlign = 'center'; sx.textBaseline = 'middle';
-      sx.fillText('♯', nx-15, ny);
+      sx.fillText('♯', nx - 15, ny);
     }
 
-    // ラベル
-    sx.fillStyle = (isRoot||isOct) ? '#ff3c6e' : '#6f6c87';
+    // 音名ラベル
+    sx.fillStyle = (isRoot || isOct) ? '#ff3c6e' : '#6f6c87';
     sx.font = "9.5px 'Space Mono',monospace";
     sx.textAlign = 'center'; sx.textBaseline = 'top';
-    sx.fillText(noteName, nx, staffTop + 4*ls + ls*0.9);
+    sx.fillText(noteName, nx, staffTop + 4*ls + ls * 0.9);
   });
 }
 
