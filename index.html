@@ -210,7 +210,7 @@ Object.entries(CATEGORIES).forEach(([cat, list]) => list.forEach(s => SLABELS[s]
 let keyIdx = 0;
 let currentCat = '教会旋法';
 let scaleName = 'アイオニアン (メジャー)';
-let rotation = 0;        // ドラッグ中の一時的な視覚オフセット（スナップ後は常に0）
+let rotation = 0;        // ドラッグ中の端数オフセット（常に -sa/2〜sa/2 の範囲）
 let bpm = 80, oct = 4;
 let isPlaying = false, loopOn = true;
 let playIdx = 0, playTimer = null;
@@ -269,7 +269,10 @@ function drawCircle() {
   }
 
   for (let i = 0; i < n; i++) {
+    // rotationは端数オフセット（-sa/2〜sa/2）: i=0が12時に近い位置
     const ang = base + rotation + i * sa;
+    // 12時に最も近いセルを「選択中」としてハイライト
+    // rotationは常に小さい値なのでi=0が12時に最も近い
     const isTop = (i === 0);
     const a = majorAlpha(i);
 
@@ -281,7 +284,6 @@ function drawCircle() {
     if (isTop) {
       cx.fillStyle = '#ff3c6e';
     } else {
-      // ピンク系を透明度で暗くする
       cx.fillStyle = `rgba(180,40,80,${a})`;
     }
     cx.fill();
@@ -294,6 +296,7 @@ function drawCircle() {
     cx.fillStyle = isTop ? '#fff' : '#f0eef5';
     cx.font = (isTop ? 'bold 26px' : '600 20px') + " 'Space Mono',monospace";
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    // i=0（12時）にkeyIdxのキー、時計回りに次のキー
     cx.fillText(MAJKEYS[(keyIdx + i) % 12], 0, 0);
     cx.globalAlpha = 1.0;
     cx.restore();
@@ -791,7 +794,7 @@ function getAng(x,y){return Math.atan2(y-CY,x-CX);}
 function startDrag(e){
   dragging=true;
   cancelAnimationFrame(animF);
-  rotation=0;  // 常にrotation=0からスタート
+  rotation=0;
   const p=evP(e);
   dragStartA=getAng(p.x,p.y);
   keyIdxAtDragStart=keyIdx;
@@ -804,17 +807,15 @@ function onMove(e){
   const p=evP(e);
   const a=getAng(p.x,p.y);
   const sa=Math.PI*2/12;
-  // ドラッグ量（ラジアン）
   let delta = a - dragStartA;
-  // 角度の折り返し対策（-πからπの範囲に正規化）
+  // 角度折り返し対策
   while(delta > Math.PI) delta -= Math.PI*2;
   while(delta < -Math.PI) delta += Math.PI*2;
-  // 何コマ動いたか（時計回りが正のため符号反転）
   const steps = -Math.round(delta/sa);
-  // keyIdxをドラッグ開始時から累積
   keyIdx = ((keyIdxAtDragStart + steps)%12+12)%12;
-  // rotationは端数だけ（スナップ前の「引っ張り」感のため）
-  rotation = delta + steps*sa;
+  // rotationは端数のみ（-sa/2〜sa/2に収める）
+  const frac = delta + steps*sa;
+  rotation = Math.max(-sa/2, Math.min(sa/2, frac));
   document.getElementById('kname').textContent = MAJKEYS[keyIdx];
   drawCircle();
 }
@@ -823,7 +824,6 @@ cc.addEventListener('touchmove', onMove, {passive:true});
 
 function onEnd(){
   if(!dragging)return; dragging=false;
-  // rotationを0にスナップするアニメーション
   const from = rotation;
   let prog=0;
   function ani(){
