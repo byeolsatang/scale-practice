@@ -74,7 +74,7 @@ header h1 .accent{color:var(--mint);}
 #playBtn{background:var(--pink);border:none;border-radius:20px;color:#1a0510;font-family:'Space Mono',monospace;
   font-size:11.5px;font-weight:700;padding:6px 16px;cursor:pointer;transition:all .15s;}
 #playBtn.stop{background:var(--amber);color:#1a1206;}
-#scoreDiv{width:100%;}
+#scoreDiv{width:100%;overflow:hidden;}
 #scoreDiv svg{background:transparent;}
 #scoreDiv .abcjs-staff line,
 #scoreDiv .abcjs-staff path{stroke:#5a5870;}
@@ -427,14 +427,15 @@ function drawStaff() {
   const abcKey = keyName;
   const abcStr = `X:1\nM:${allNotes.length}/4\nL:1/4\nK:${abcKey}\n${notes.join(' ')}`;
 
+  const w = div.clientWidth || 380;
   ABCJS.renderAbc(div, abcStr, {
     responsive: 'resize',
     foregroundColor: '#dcd9ea',
-    paddingtop: 4,
-    paddingbottom: 4,
-    paddingleft: 0,
-    paddingright: 0,
-    staffwidth: div.clientWidth || 380,
+    paddingtop: 10,
+    paddingbottom: 10,
+    paddingleft: 16,
+    paddingright: 16,
+    staffwidth: w - 32,
   });
 
   // 発光中の音符に色を付ける
