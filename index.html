@@ -788,24 +788,33 @@ function evP(e){
 }
 function getAng(x,y){return Math.atan2(y-CY,x-CX);}
 
-cc.addEventListener('mousedown',  e=>{dragging=true;cancelAnimationFrame(animF);rotation=0;const p=evP(e);dragStartA=getAng(p.x,p.y);keyIdxAtDragStart=keyIdx;});
-cc.addEventListener('touchstart', e=>{dragging=true;cancelAnimationFrame(animF);rotation=0;const p=evP(e);dragStartA=getAng(p.x,p.y);keyIdxAtDragStart=keyIdx;},{passive:true});
+function startDrag(e){
+  dragging=true;
+  cancelAnimationFrame(animF);
+  rotation=0;  // 常にrotation=0からスタート
+  const p=evP(e);
+  dragStartA=getAng(p.x,p.y);
+  keyIdxAtDragStart=keyIdx;
+}
+cc.addEventListener('mousedown', startDrag);
+cc.addEventListener('touchstart', startDrag, {passive:true});
 
 function onMove(e){
   if(!dragging)return;
   const p=evP(e);
   const a=getAng(p.x,p.y);
   const sa=Math.PI*2/12;
-  const rawRot = a - dragStartA;
-  rotation = rawRot;
-  // ドラッグ中: keyIdxをドラッグ開始時から累積更新
-  // drawCircle()はMAJKEYS[(keyIdx+i)%12]でi=0を12時に描くので
-  // keyIdxを更新するとi=0の表示キーが変わる
-  const steps = -Math.round(rawRot/sa);
+  // ドラッグ量（ラジアン）
+  let delta = a - dragStartA;
+  // 角度の折り返し対策（-πからπの範囲に正規化）
+  while(delta > Math.PI) delta -= Math.PI*2;
+  while(delta < -Math.PI) delta += Math.PI*2;
+  // 何コマ動いたか（時計回りが正のため符号反転）
+  const steps = -Math.round(delta/sa);
+  // keyIdxをドラッグ開始時から累積
   keyIdx = ((keyIdxAtDragStart + steps)%12+12)%12;
-  // rotationはi=0が「steps*sa分ずれた位置」に見えるように設定
-  // → ドラッグ量から「スナップ後の端数」だけ残す
-  rotation = rawRot + steps*sa;
+  // rotationは端数だけ（スナップ前の「引っ張り」感のため）
+  rotation = delta + steps*sa;
   document.getElementById('kname').textContent = MAJKEYS[keyIdx];
   drawCircle();
 }
@@ -814,14 +823,13 @@ cc.addEventListener('touchmove', onMove, {passive:true});
 
 function onEnd(){
   if(!dragging)return; dragging=false;
-  // keyIdxはonMoveで確定済み。rotationを0にスナップするだけ
+  // rotationを0にスナップするアニメーション
   const from = rotation;
-  const diff = -from;
   let prog=0;
   function ani(){
-    prog+=0.2;
+    prog+=0.18;
     if(prog>=1){rotation=0; redraw(); return;}
-    rotation = from + diff*(1-Math.pow(1-prog,3));
+    rotation = from*(1-Math.pow(1-prog,3));
     drawCircle(); animF=requestAnimationFrame(ani);
   }
   animF=requestAnimationFrame(ani);
